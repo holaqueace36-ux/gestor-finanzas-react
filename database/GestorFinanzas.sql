@@ -1,19 +1,10 @@
--- =====================================================
--- BASE DE DATOS: GestorFinanzas
--- Motor: SQL Server
--- Versión: 1.0
--- =====================================================
 
--- Crear la base de datos
 CREATE DATABASE GestorFinanzas;
 GO
 
 USE GestorFinanzas;
 GO
 
--- =====================================================
--- TABLA 1: Usuarios
--- =====================================================
 CREATE TABLE Usuarios (
     UsuarioID INT PRIMARY KEY IDENTITY(1,1),
     Nombre NVARCHAR(100) NOT NULL,
@@ -26,9 +17,6 @@ CREATE TABLE Usuarios (
     Activo BIT NOT NULL DEFAULT 1
 );
 
--- =====================================================
--- TABLA 2: Categorias
--- =====================================================
 CREATE TABLE Categorias (
     CategoriaID INT PRIMARY KEY IDENTITY(1,1),
     UsuarioID INT NOT NULL,
@@ -41,9 +29,6 @@ CREATE TABLE Categorias (
     CONSTRAINT UK_Categorias UNIQUE (UsuarioID, Nombre, Tipo)
 );
 
--- =====================================================
--- TABLA 3: Cuentas
--- =====================================================
 CREATE TABLE Cuentas (
     CuentaID INT PRIMARY KEY IDENTITY(1,1),
     UsuarioID INT NOT NULL,
@@ -56,9 +41,6 @@ CREATE TABLE Cuentas (
     FOREIGN KEY (UsuarioID) REFERENCES Usuarios(UsuarioID) ON DELETE CASCADE
 );
 
--- =====================================================
--- TABLA 4: Transacciones
--- =====================================================
 CREATE TABLE Transacciones (
     TransaccionID INT PRIMARY KEY IDENTITY(1,1),
     UsuarioID INT NOT NULL,
@@ -75,9 +57,6 @@ CREATE TABLE Transacciones (
     FOREIGN KEY (CategoriaID) REFERENCES Categorias(CategoriaID)
 );
 
--- =====================================================
--- TABLA 5: Presupuestos
--- =====================================================
 CREATE TABLE Presupuestos (
     PresupuestoID INT PRIMARY KEY IDENTITY(1,1),
     UsuarioID INT NOT NULL,
@@ -92,9 +71,6 @@ CREATE TABLE Presupuestos (
     CONSTRAINT UK_Presupuestos UNIQUE (UsuarioID, CategoriaID, Mes, Año)
 );
 
--- =====================================================
--- ÍNDICES PARA OPTIMIZACIÓN
--- =====================================================
 CREATE INDEX IX_Categorias_UsuarioID ON Categorias(UsuarioID);
 CREATE INDEX IX_Cuentas_UsuarioID ON Cuentas(UsuarioID);
 CREATE INDEX IX_Transacciones_UsuarioID ON Transacciones(UsuarioID);
@@ -102,10 +78,6 @@ CREATE INDEX IX_Transacciones_CuentaID ON Transacciones(CuentaID);
 CREATE INDEX IX_Transacciones_Fecha ON Transacciones(Fecha);
 CREATE INDEX IX_Transacciones_Tipo ON Transacciones(Tipo);
 CREATE INDEX IX_Presupuestos_UsuarioID ON Presupuestos(UsuarioID);
-
--- =====================================================
--- VISTA 1: Resumen de Saldo por Cuenta
--- =====================================================
 CREATE VIEW vw_SaldoPorCuenta AS
 SELECT 
     c.CuentaID,
@@ -120,9 +92,6 @@ FROM Cuentas c
 LEFT JOIN Transacciones t ON c.CuentaID = t.CuentaID
 GROUP BY c.CuentaID, c.UsuarioID, c.Nombre, c.Tipo, c.SaldoActual;
 
--- =====================================================
--- VISTA 2: Gasto Mensual por Categoría
--- =====================================================
 CREATE VIEW vw_GastoMensualPorCategoria AS
 SELECT 
     u.UsuarioID,
@@ -137,9 +106,6 @@ JOIN Usuarios u ON t.UsuarioID = u.UsuarioID
 LEFT JOIN Categorias c ON t.CategoriaID = c.CategoriaID
 GROUP BY u.UsuarioID, u.Nombre, MONTH(t.Fecha), YEAR(t.Fecha), c.Nombre;
 
--- =====================================================
--- VISTA 3: Monitoreo de Presupuestos
--- =====================================================
 CREATE VIEW vw_MonitoreoPrespuestos AS
 SELECT 
     p.PresupuestoID,
@@ -162,10 +128,6 @@ LEFT JOIN Transacciones t ON t.CategoriaID = p.CategoriaID
     AND YEAR(t.Fecha) = p.Año
     AND t.Tipo = 'gasto'
 GROUP BY p.PresupuestoID, p.UsuarioID, c.Nombre, p.MontoLimite, p.Mes, p.Año;
-
--- =====================================================
--- PROCEDIMIENTO 1: Registrar Transacción
--- =====================================================
 CREATE PROCEDURE sp_RegistrarTransaccion
     @UsuarioID INT,
     @CuentaID INT,
@@ -180,20 +142,14 @@ BEGIN
     SET NOCOUNT ON;
     BEGIN TRY
         BEGIN TRANSACTION;
-        
-        -- Validar que el usuario existe
         IF NOT EXISTS (SELECT 1 FROM Usuarios WHERE UsuarioID = @UsuarioID AND Activo = 1)
         BEGIN
             THROW 50001, 'Usuario no encontrado o inactivo', 1;
         END;
-        
-        -- Validar que la cuenta pertenece al usuario
         IF NOT EXISTS (SELECT 1 FROM Cuentas WHERE CuentaID = @CuentaID AND UsuarioID = @UsuarioID)
         BEGIN
             THROW 50002, 'Cuenta no encontrada', 1;
         END;
-        
-        -- Si es gasto, validar saldo
         IF @Tipo = 'gasto'
         BEGIN
             DECLARE @SaldoActual DECIMAL(18,2);
@@ -204,16 +160,12 @@ BEGIN
                 THROW 50003, 'Saldo insuficiente', 1;
             END;
         END;
-        
-        -- Establecer fecha actual si no se proporciona
+
         IF @Fecha IS NULL
             SET @Fecha = CAST(GETDATE() AS DATE);
         
-        -- Insertar transacción
         INSERT INTO Transacciones (UsuarioID, CuentaID, CategoriaID, Descripcion, Monto, Tipo, Fecha, Nota)
         VALUES (@UsuarioID, @CuentaID, @CategoriaID, @Descripcion, @Monto, @Tipo, @Fecha, @Nota);
-        
-        -- Actualizar saldo de la cuenta
         IF @Tipo = 'ingreso'
             UPDATE Cuentas SET SaldoActual = SaldoActual + @Monto, FechaActualizacion = GETDATE() WHERE CuentaID = @CuentaID;
         ELSE
@@ -229,9 +181,6 @@ BEGIN
 END;
 GO
 
--- =====================================================
--- PROCEDIMIENTO 2: Obtener Resumen Mensual
--- =====================================================
 CREATE PROCEDURE sp_ObtenerResumenMensual
     @UsuarioID INT,
     @Mes INT,
@@ -256,10 +205,6 @@ BEGIN
     GROUP BY u.Nombre;
 END;
 GO
-
--- =====================================================
--- PROCEDIMIENTO 3: Obtener Transacciones por Rango de Fechas
--- =====================================================
 CREATE PROCEDURE sp_ObtenerTransaccionesPorFecha
     @UsuarioID INT,
     @FechaInicio DATE,
@@ -285,19 +230,13 @@ BEGIN
     ORDER BY t.Fecha DESC;
 END;
 GO
-
--- =====================================================
--- DATOS DE PRUEBA
--- =====================================================
-
--- Insertar usuario de prueba
+ --usuario de prueba /NO BORRAR
 INSERT INTO Usuarios (Nombre, Email, Contraseña, Ocupacion, SaldoInicial)
 VALUES ('Juan Pérez', 'juan@example.com', 'hashed_password_123', 'Ingeniero', 5000.00);
 
 INSERT INTO Usuarios (Nombre, Email, Contraseña, Ocupacion, SaldoInicial)
 VALUES ('María García', 'maria@example.com', 'hashed_password_456', 'Médico', 8000.00);
 
--- Insertar categorías
 INSERT INTO Categorias (UsuarioID, Nombre, Tipo, Color, Icono)
 VALUES 
 (1, 'Salario', 'ingreso', '#2ECC71', 'money'),
@@ -310,7 +249,6 @@ VALUES
 (2, 'Alimentación', 'gasto', '#E74C3C', 'shopping-cart'),
 (2, 'Medicinas', 'gasto', '#E67E22', 'pills');
 
--- Insertar cuentas
 INSERT INTO Cuentas (UsuarioID, Nombre, Tipo, SaldoActual)
 VALUES 
 (1, 'Efectivo', 'efectivo', 1000.00),
@@ -319,7 +257,6 @@ VALUES
 (2, 'Efectivo', 'efectivo', 2000.00),
 (2, 'Cuenta Corriente', 'corriente', 5000.00);
 
--- Insertar transacciones
 INSERT INTO Transacciones (UsuarioID, CuentaID, CategoriaID, Descripcion, Monto, Tipo, Fecha, Nota)
 VALUES 
 (1, 1, 1, 'Salario mensual', 3000.00, 'ingreso', '2026-04-01', 'Pago por mes de abril'),
@@ -331,7 +268,6 @@ VALUES
 (2, 4, 8, 'Supermercado', 200.00, 'gasto', '2026-04-05', 'Compras diarias'),
 (2, 5, 9, 'Medicinas farmacia', 120.00, 'gasto', '2026-04-12', 'Prescripción médica');
 
--- Insertar presupuestos
 INSERT INTO Presupuestos (UsuarioID, CategoriaID, MontoLimite, Mes, Año, Activo)
 VALUES 
 (1, 3, 500.00, 4, 2026, 1),  -- Presupuesto de 500 para Alimentación en abril
@@ -340,9 +276,6 @@ VALUES
 (2, 8, 400.00, 4, 2026, 1),  -- Presupuesto de 400 para Alimentación en abril
 (2, 9, 300.00, 4, 2026, 1);  -- Presupuesto de 300 para Medicinas en abril
 
--- =====================================================
--- VERIFICACIÓN FINAL
--- =====================================================
 SELECT 'Base de datos creada exitosamente' AS Mensaje;
 SELECT COUNT(*) AS TotalUsuarios FROM Usuarios;
 SELECT COUNT(*) AS TotalCategorias FROM Categorias;
